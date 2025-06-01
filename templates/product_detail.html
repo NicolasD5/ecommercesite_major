@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.product-layout {
+    display: flex;
+    gap: 40px;
+    max-width: 1200px;
+    margin: 40px auto;
+    padding: 20px;
+}
+
+.gallery-section {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+}
+
+.thumbnail-strip {
+    position: relative;
+    width: 100px;
+    padding: 40px 0;
+}
+
+.thumbnail-container {
+    height: 400px;
+    overflow: hidden;
+    position: relative;
+}
+
+.thumbnail-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: transform 0.3s ease;
+}
+
+.thumbnail {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.thumbnail.active {
+    border-color: #4CAF50;
+}
+
+.scroll-button {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 30px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.scroll-up {
+    top: 0;
+}
+
+.scroll-down {
+    bottom: 0;
+}
+
+.main-image-container {
+    flex: 1;
+    margin-bottom: 20px;
+    background: #f8f8f8;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.main-image {
+    width: 100%;
+    height: 500px;
+    object-fit: contain;
+    background: #f8f8f8;
+    border-radius: 8px;
+}
+
+.product-info {
+    flex: 1;
+    padding: 20px;
+}
+
+.product-title {
+    font-size: 2em;
+    margin-bottom: 10px;
+}
+
+.product-price {
+    font-size: 1.5em;
+    color: #4CAF50;
+    margin-bottom: 20px;
+}
+
+.add-to-cart-form {
+    margin-top: 30px;
+}
+
+.quantity-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.add-to-cart-button {
+    width: 100%;
+    padding: 15px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1em;
+}
+
+.add-to-cart-button:hover {
+    background: #45a049;
+}
+
+.gallery-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.gallery-button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.gallery-button:hover {
+    background: #45a049;
+}
+
+.gallery-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.image-counter {
+    font-size: 0.9em;
+    color: #666;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="product-layout">
+    <div class="gallery-section">
+        <!-- Thumbnail Strip -->
+        <div class="thumbnail-strip">
+            <div class="thumbnail-container" style="height: 500px; overflow-y: auto; scrollbar-width: thin;">
+                <div class="thumbnail-scroll">
+                    <!-- Main thumbnail -->
+                    <img src="{{ url_for('static', filename='product_images/' + product.image) }}" 
+                         class="thumbnail active"
+                         style="width: 80px; height: 80px; object-fit: cover; margin-bottom: 10px; cursor: pointer;"
+                         onclick="updateMainImage(this)">
+                    
+                    <!-- Additional thumbnails -->
+                    {% if product.additional_images %}
+                        {% for image in product.additional_images.split(',') %}
+                            {% set image_path = image.strip() %}
+                            <img src="{{ url_for('static', filename='product_images/' + image_path) }}"
+                                 class="thumbnail"
+                                 style="width: 80px; height: 80px; object-fit: cover; margin-bottom: 10px; cursor: pointer;"
+                                 onclick="updateMainImage(this)"
+                                 onerror="this.remove()">
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Image -->
+        <div class="main-image-container">
+            <img id="mainImage" 
+                 src="{{ url_for('static', filename='product_images/' + product.image) }}" 
+                 alt="{{ product.name }}"
+                 style="width: 100%; height: 500px; object-fit: contain;">
+        </div>
+    </div>
+
+    <div class="product-info">
+        <h1 class="product-title">{{ product.name }}</h1>
+        <p class="product-price">${{ "%.2f"|format(product.price) }}</p>
+        <p class="stock-info">In stock: {{ product.stock }}</p>
+        
+        <div class="product-description">
+            {{ product.description }}
+        </div>
+
+        <form action="{{ url_for('add_to_cart', product_id=product.id) }}" 
+              method="POST" 
+              class="add-to-cart-form">
+            <input type="number" 
+                   name="quantity" 
+                   value="1" 
+                   min="1" 
+                   max="{{ product.stock }}" 
+                   required 
+                   class="quantity-input">
+            <button type="submit" class="add-to-cart-button">Add to Cart</button>
+        </form>
+        
+        <a href="{{ url_for('products') }}" class="back-button">← Back to Products</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function updateMainImage(thumbnail) {
+        // Update main image
+        document.getElementById('mainImage').src = thumbnail.src;
+        
+        // Update active state
+        document.querySelectorAll('.thumbnail').forEach(t => {
+            t.style.borderColor = 'transparent';
+        });
+        thumbnail.style.borderColor = '#4CAF50';
+    }
+
+    // Add click handlers to all thumbnails
+    document.querySelectorAll('.thumbnail').forEach(thumbnail => {
+        thumbnail.onclick = function() {
+            updateMainImage(this);
+        };
+    });
+
+    // Set initial active state
+    const firstThumb = document.querySelector('.thumbnail');
+    if (firstThumb) {
+        firstThumb.style.borderColor = '#4CAF50';
+    }
+});
+</script>
+{% endblock %}

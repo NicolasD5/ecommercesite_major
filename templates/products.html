@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Products{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% endblock %}
+
+{% block content %}
+<main>
+    <h1>Electric Guitars</h1>
+    
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="flash-message">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="products-grid">
+        {% for product in products %}
+        <div class="product-card">
+            {% if product.image %}
+            <img src="{{ url_for('static', filename='product_images/' + product.image) }}" alt="{{ product.name }}">
+            {% endif %}
+            <h2><a href="{{ url_for('product_detail', product_id=product['id']) }}">{{ product.name }}</a></h2>
+            <p class="price">${{ "%.2f"|format(product.price) }}</p>
+            <p class="stock">In stock: {{ product.stock }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</main>
+{% endblock %}
