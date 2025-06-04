@@ -640,21 +640,26 @@ def products():
 @app.route("/product/<int:product_id>")
 def product_detail(product_id):
     try:
-        # Get product details
         connection = get_db()
         cursor = connection.cursor()
+        
+        # Get current product
         cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
         product = cursor.fetchone()
         
         if product is None:
             flash("Product not found", "danger")
             return redirect(url_for('products'))
-            
-        # Convert to dictionary for template
-        product_dict = dict(product)
         
-        return render_template('product_detail.html', product=product_dict)
+        # Get all products for carousel
+        cursor.execute("SELECT * FROM products")
+        all_products = cursor.fetchall()
         
+        return render_template('product_detail.html', 
+                             product=dict(product),
+                             products=all_products,
+                             current_product_id=product_id)
+                             
     except Exception as e:
         logger.error(f"Error loading product details: {e}")
         flash("Error loading product details", "danger")

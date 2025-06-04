@@ -3,35 +3,315 @@
 {% block title %}Checkout{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<!-- Bootstrap 5 CDN: prevents 404s for missing static files -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    body {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e7eb 100%);
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+        color: #2d3436;
+    }
+
+    .container {
+        max-width: 1200px;
+        margin: 3rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .checkout-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .checkout-header h2 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: #1a202c;
+    }
+
+    .checkout-header .lead {
+        font-size: 1.1rem;
+        color: #4a5568;
+    }
+
+    .checkout-wrapper {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        padding: 2.5rem;
+    }
+
+    .form-section {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-section h4 {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #1a202c;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .form-group label {
+        font-weight: 500;
+        font-size: 0.95rem;
+        color: #4a5568;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-control {
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+        height: auto;
+    }
+
+    .form-control:focus {
+        border-color: #4299e1;
+        box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+    }
+
+    .custom-select {
+        height: calc(1.5em + 1.5rem + 4px);
+        border-radius: 12px;
+        border: 2px solid #e2e8f0;
+    }
+
+    .order-summary {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 2rem;
+        position: sticky;
+        top: 2rem;
+    }
+
+    .order-summary h4 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1a202c;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .list-group-item {
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1rem 0;
+    }
+
+    .list-group-item:last-child {
+        border-bottom: none;
+        margin-top: 1rem;
+        padding-top: 1.5rem;
+        border-top: 2px solid #e2e8f0;
+    }
+
+    .list-group-item h6 {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 0.25rem;
+    }
+
+    .text-muted {
+        color: #718096 !important;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+        border: none;
+        padding: 1rem 2rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(66, 153, 225, 0.3);
+    }
+
+    /* Payment Method Styling */
+    .form-check {
+        padding: 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .form-check:hover {
+        border-color: #4299e1;
+        background: rgba(66, 153, 225, 0.05);
+    }
+
+    .form-check-input:checked ~ .form-check-label {
+        color: #4299e1;
+        font-weight: 500;
+    }
+
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+        .container {
+            padding: 1rem;
+        }
+        
+        .checkout-wrapper {
+            padding: 1.5rem;
+        }
+        
+        .form-section {
+            padding: 1.5rem;
+        }
+        
+        .order-summary {
+            margin-top: 2rem;
+            position: static;
+        }
+
+        .btn-primary {
+            padding: 0.875rem 1.5rem;
+            font-size: 1rem;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container my-5">
-    <h1 class="mb-4">Checkout</h1>
-    <div class="row g-4">
-        <div class="col-md-7">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white">
-                    <h2 class="h5 mb-0">Order Summary</h2>
-                </div>
-                <div class="card-body">
-                    {% for item in cart_items %}
-                    <div class="d-flex justify-content-between align-items-center border-bottom py-3">
-                        <div>
-                            <h5 class="mb-1">{{ item.name }}</h5>
-                            <div class="text-muted">
-                                <p class="mb-1">Price: ${{ "%.2f"|format(item.price) }}</p>
-                                <p class="mb-0">Quantity: {{ item.quantity }}</p>
+<div class="container">
+    <div class="checkout-header">
+        <h2>Checkout</h2>
+        <p class="lead">Securely complete your order below.</p>
+    </div>
+
+    <div class="checkout-wrapper">
+        <div class="row">
+            <div class="col-md-8">
+                <form>
+                    <div class="form-section">
+                        <h4>Billing Address</h4>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label for="firstName">First Name</label>
+                                <input type="text" class="form-control" id="firstName" required>
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label for="lastName">Last Name</label>
+                                <input type="text" class="form-control" id="lastName" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email <span class="text-muted">(optional)</span></label>
+                            <input type="email" class="form-control" id="email" placeholder="you@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="address">Street Address</label>
+                            <input type="text" class="form-control" id="address" placeholder="1234 Main St" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-5">
+                                <label for="country">Country</label>
+                                <select class="custom-select d-block w-100" id="country" required>
+                                    <option value="">Choose...</option>
+                                    <option>United States</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label for="state">State</label>
+                                <select class="custom-select d-block w-100" id="state" required>
+                                    <option value="">Choose...</option>
+                                    <option>California</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label for="zip">Zip</label>
+                                <input type="text" class="form-control" id="zip" required>
                             </div>
                         </div>
                     </div>
-                    {% endfor %}
+
+                    <div class="form-section">
+                        <h4>Payment</h4>
+                        <div class="form-check">
+                            <input id="credit" name="paymentMethod" type="radio" class="form-check-input" checked required>
+                            <label class="form-check-label" for="credit">Credit card</label>
+                        </div>
+                        <div class="form-check">
+                            <input id="debit" name="paymentMethod" type="radio" class="form-check-input" required>
+                            <label class="form-check-label" for="debit">Debit card</label>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input id="paypal" name="paymentMethod" type="radio" class="form-check-input" required>
+                            <label class="form-check-label" for="paypal">PayPal</label>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label for="cc-name">Name on card</label>
+                                <input type="text" class="form-control" id="cc-name" required>
+                                <small class="text-muted">Full name as displayed on card</small>
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label for="cc-number">Card number</label>
+                                <input type="text" class="form-control" id="cc-number" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group col-md-3">
+                                <label for="cc-expiration">Expiration</label>
+                                <input type="text" class="form-control" id="cc-expiration" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label for="cc-cvv">CVV</label>
+                                <input type="text" class="form-control" id="cc-cvv" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-block" type="submit">Complete Order</button>
+                </form>
+            </div>
+
+            <div class="col-md-4">
+                <div class="order-summary">
+                    <h4>Your Cart</h4>
+                    <ul class="list-group mb-3">
+                        {% for item in cart_items %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <div>
+                                <h6 class="my-0">{{ item.name }}</h6>
+                                <small class="text-muted">Qty: {{ item.quantity }}</small>
+                            </div>
+                            <span class="text-muted">${{ "%.2f"|format(item.price * item.quantity) }}</span>
+                        </li>
+                        {% endfor %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <strong>Total</strong>
+                            <strong>${{ "%.2f"|format(total) }}</strong>
+                        </li>
+                    </ul>
                 </div>
             </div>
-        </div> 
+        </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 {% endblock %}
