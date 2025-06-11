@@ -752,78 +752,114 @@ def get_product_by_id(product_id):
         cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
         product = cursor.fetchone()
         return dict(product) if product else None
-    except Exception as e:
-        logger.error(f"Error fetching product with ID {product_id}: {e}")
-        return None
     finally:
         cursor.close()
 
-# Update the checkout function to use the helper function
+@app.route('/receipt/<int:order_id>')
+def receipt(order_id):
+    if not session.get('user_id'):
+        return redirect(url_for('login'))
+        
+    try:
+        connection = get_db()
+        cursor = connection.cursor()
+        
+        # Get order details with a simpler query
+        cursor.execute("""
+            SELECT * FROM orders WHERE id = ? AND user_id = ?
+        """, (order_id, session['user_id']))
+        
+        order = cursor.fetchone()
+        
+        if not order:
+            flash("Order not found", "danger")
+            return redirect(url_for('customer_dashboard'))
+            
+        # Get order items with product details
+        cursor.execute("""
+            SELECT p.name, oi.quantity, oi.price
+            FROM order_items oi
+            JOIN products p ON p.id = oi.product_id
+            WHERE oi.order_id = ?
+        """, (order_id,))
+        
+        items = cursor.fetchall()
+        
+        # Prepare order data
+        order_data = {
+            'id': order['id'],
+            'created_at': order['created_at'],
+            'address': session.get('address', 'No address provided'),
+            'total': order['total'],
+            'items': [{
+                'name': item['name'],
+                'quantity': item['quantity'],
+                'price': item['price']
+            } for item in items]
+        }
+        
+        return render_template('receipt.html', order=order_data)
+        
+    except Exception as e:
+        logger.error(f"Error displaying receipt: {str(e)}", exc_info=True)
+        flash("Error displaying your receipt. Please check your order in the dashboard.", "danger")
+        return redirect(url_for('customer_dashboard'))
+    finally:
+        if 'connection' in locals():
+            connection.close()
+
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
-    # Check if user is logged in
     if not session.get('user_id'):
         flash("Please log in to checkout", "warning")
-        session['next'] = url_for('checkout')
         return redirect(url_for('login'))
-    
-    # Get cart items
+
     cart_items = get_cart_items()
+    total = calculate_cart_total()
+
     if not cart_items:
         flash("Your cart is empty", "warning")
         return redirect(url_for('cart'))
-    
-    total = calculate_cart_total()
-    
-    # Handle order submission
+
     if request.method == 'POST':
         try:
             connection = get_db()
             cursor = connection.cursor()
-            
+
             # Create the order
             cursor.execute(
-                "INSERT INTO orders (user_id, total) VALUES (?, ?)",
+                """INSERT INTO orders (user_id, total, created_at) 
+                   VALUES (?, ?, datetime('now'))""",
                 (session['user_id'], total)
             )
             order_id = cursor.lastrowid
             
-            # Create the order items
+            # Create order items and update stock
             for item in cart_items:
                 cursor.execute(
-                    """INSERT INTO order_items 
-                       (order_id, product_id, quantity, price) 
-                       VALUES (?, ?, ?, ?)""",
+                    "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
                     (order_id, item['id'], item['quantity'], item['price'])
                 )
-            
-            # Update product stock
-            for item in cart_items:
                 cursor.execute(
                     "UPDATE products SET stock = stock - ? WHERE id = ?",
                     (item['quantity'], item['id'])
                 )
-            
+
             connection.commit()
-            session.pop('cart', None)  # Clear the cart
-            flash("Order placed successfully!", "success")
-            return redirect(url_for('products'))
+            session.pop('cart', None)
+            
+            # Redirect to receipt page
+            return redirect(url_for('receipt', order_id=order_id))
             
         except Exception as e:
+            logger.error(f"Checkout error: {str(e)}")
             if 'connection' in locals():
                 connection.rollback()
-            logger.error(f"Checkout error: {e}")
-            flash("Error processing your order", "danger")
-            return redirect(url_for('cart'))
-        finally:
-            if 'connection' in locals():
                 connection.close()
-    
-    # Show checkout page
-    print(cart_items)
-    return render_template('checkout.html', 
-                         cart_items=cart_items,
-                         total=total)
+            flash("Error processing your order. Please try again.", "danger")
+            return render_template('checkout.html', cart_items=cart_items, total=total)
+
+    return render_template('checkout.html', cart_items=cart_items, total=total)
 
 @app.errorhandler(Exception)
 def unhandled_exception(e):
