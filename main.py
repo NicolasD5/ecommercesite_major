@@ -714,7 +714,6 @@ def home():
 
 @app.route("/cart")
 def cart():
-    # Remove login requirement for viewing cart
     cart_items = []
     total = 0
     
@@ -737,14 +736,13 @@ def cart():
 
 @app.route("/add_to_cart/<int:product_id>", methods=["POST"])
 def add_to_cart(product_id):
-    # Remove login check to allow anyone to add to cart
     try:
         quantity = int(request.form.get("quantity", 1))
         if quantity < 1:
             flash("Invalid quantity", "danger")
             return redirect(url_for("product_detail", product_id=product_id))
         
-        # Initialize cart in session if it doesn't exist
+        # Initialise cart in session if it doesn't exist
         if 'cart' not in session:
             session['cart'] = {}
             
