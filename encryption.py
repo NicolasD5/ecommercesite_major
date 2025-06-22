@@ -14,8 +14,8 @@ else:
 
 encryptor = Fernet(key)
 
-def encrypt_data(data): #Encrypts the data and function is called before adding data to the database
+def encrypt_data(data): #Encrypts the data and function is called before adding data to the database (Function called in main.py)
     return encryptor.encrypt(data.encode()).decode()
 
-def decrypt_data(data): #Decrypts data and function is called when retrieving data from the database
+def decrypt_data(data): #Decrypts data and function is called when retrieving data from the database (Function called in main.py)
     return encryptor.decrypt(data.encode()).decode()

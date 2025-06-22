@@ -26,11 +26,27 @@ from password_validation import PasswordValidator
 import base64
 from datetime import datetime
 import uuid
+#from flask_sqlalchemy import SQLAlchemy
 
 # Create Flask application instance
 app = Flask(__name__)
+'''
+# SQLAlchemy Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-
+# Define Product Model
+class Product(db.Model):
+    __tablename__ = 'products'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    stock = db.Column(db.Integer, nullable=False)
+    image = db.Column(db.String(200))
+    additional_images = db.Column(db.Text)
+'''
 # Initialise rate limiter with IP-based tracking and stricter limits
 '''
 limiter = Limiter(
@@ -185,8 +201,7 @@ def validate_user_id(user_id): #Validate that user_id is a positive integer ensu
     except (ValueError, TypeError):
         raise ValueError("Invalid user ID")
 
-def get_cart_items():
-    """Helper function to get all items in the cart with their details"""
+def get_cart_items(): #Helper function to get all items in the cart with their details
     cart_items = []
     if session.get('cart'):
         connection = get_db()
@@ -359,39 +374,56 @@ def logout():
 @app.route("/create_account", methods=["GET", "POST"])
 def create_account():
     if request.method == "POST":
-        username = request.form['username']
-        password = request.form['password']
-        mobile = request.form.get('mobile', '')
-        address = request.form.get('address', '')
-        
         try:
-            # Encrypt the username and user data
-            encrypted_username = encrypt_data(username)
-            encrypted_mobile = encrypt_data(mobile) if mobile else ''
-            encrypted_address = encrypt_data(address) if address else ''
+            username = request.form.get('username')
+            password = request.form.get('password')
+            mobile = request.form.get('mobile', '')
+            address = request.form.get('address', '')
             
-            # Hash the password
-            hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-            
-            # Insert the new user
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute(
-                'INSERT INTO users (username, password, mobile, address) VALUES (?, ?, ?, ?)',
-                (encrypted_username, hashed_password, encrypted_mobile, encrypted_address)
-            )
-            conn.commit()
-            
-            flash('Account created successfully! Please login.')
-            return redirect(url_for('login'))
-            
+            # Basic validation
+            if not username or not password:
+                flash('Username and password are required', 'danger')
+                return redirect(url_for('create_account'))
+
+            if username_exists(username):
+                flash('Username already exists', 'danger')
+                return redirect(url_for('create_account'))
+
+            connection = get_db()
+            cursor = connection.cursor()
+
+            try:
+                # Insert with only required fields
+                cursor.execute(
+                    'INSERT INTO users (username, password, mobile, address, email, security_answer_1, security_answer_2) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    (
+                        encrypt_data(username),
+                        bcrypt.generate_password_hash(password).decode('utf-8'),
+                        encrypt_data(mobile) if mobile else encrypt_data('Not provided'),
+                        encrypt_data(address) if address else encrypt_data('Not provided'),
+                        encrypt_data('example@email.com'),  # Default email
+                        'default_answer1',  # Default security answer
+                        'default_answer2'   # Default security answer
+                    )
+                )
+                
+                connection.commit()
+                flash('Account created successfully! Please login.', 'success')
+                return redirect(url_for('login'))
+
+            except sqlite3.Error as e:
+                connection.rollback()
+                logger.error(f"Database error: {str(e)}")
+                flash('Error creating account. Please try again.', 'danger')
+                return redirect(url_for('create_account'))
+            finally:
+                connection.close()
+
         except Exception as e:
-            logger.error(f"Error creating account: {str(e)}")
-            flash('An error occurred while creating your account')
+            logger.error(f"Account creation error: {str(e)}")
+            flash('An error occurred. Please try again.', 'danger')
             return redirect(url_for('create_account'))
-        finally:
-            close_db(conn)
-    
+
     return render_template('create_account.html')
 
 @app.route("/forgot_login", methods=["GET", "POST"])
@@ -758,55 +790,59 @@ def get_product_by_id(product_id):
 @app.route('/receipt/<int:order_id>')
 def receipt(order_id):
     if not session.get('user_id'):
+        flash("Please log in to view receipts", "warning")
         return redirect(url_for('login'))
-        
+
     try:
         connection = get_db()
         cursor = connection.cursor()
         
-        # Get order details with a simpler query
+        # Get order info and verify it belongs to current user
         cursor.execute("""
-            SELECT * FROM orders WHERE id = ? AND user_id = ?
+            SELECT o.id, o.created_at, o.total, o.user_id
+            FROM orders o
+            WHERE o.id = ? AND o.user_id = ?
         """, (order_id, session['user_id']))
         
         order = cursor.fetchone()
         
         if not order:
-            flash("Order not found", "danger")
+            connection.close()
+            flash("Receipt not found", "danger")
             return redirect(url_for('customer_dashboard'))
             
-        # Get order items with product details
+        # Get order items
         cursor.execute("""
-            SELECT p.name, oi.quantity, oi.price
+            SELECT p.name, oi.quantity, oi.price as total_price
             FROM order_items oi
-            JOIN products p ON p.id = oi.product_id
+            JOIN products p ON oi.product_id = p.id
             WHERE oi.order_id = ?
         """, (order_id,))
         
         items = cursor.fetchall()
         
-        # Prepare order data
         order_data = {
             'id': order['id'],
             'created_at': order['created_at'],
-            'address': session.get('address', 'No address provided'),
+            'address': session.get('address'),
             'total': order['total'],
             'items': [{
                 'name': item['name'],
                 'quantity': item['quantity'],
-                'price': item['price']
+                'unit_price': item['total_price'] / item['quantity'],
+                'total_price': item['total_price']
             } for item in items]
         }
         
+        connection.close()
         return render_template('receipt.html', order=order_data)
         
     except Exception as e:
-        logger.error(f"Error displaying receipt: {str(e)}", exc_info=True)
-        flash("Error displaying your receipt. Please check your order in the dashboard.", "danger")
-        return redirect(url_for('customer_dashboard'))
-    finally:
+        logger.error(f"Receipt error: {str(e)}")
         if 'connection' in locals():
             connection.close()
+        flash("Error displaying receipt", "danger")
+        return redirect(url_for('customer_dashboard'))
 
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
@@ -826,6 +862,9 @@ def checkout():
             connection = get_db()
             cursor = connection.cursor()
 
+            # Start transaction
+            cursor.execute("BEGIN TRANSACTION")
+
             # Create the order
             cursor.execute(
                 """INSERT INTO orders (user_id, total, created_at) 
@@ -833,31 +872,36 @@ def checkout():
                 (session['user_id'], total)
             )
             order_id = cursor.lastrowid
-            
-            # Create order items and update stock
+
+            # Insert order items and update stock
             for item in cart_items:
+                # Insert order item
                 cursor.execute(
                     "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
-                    (order_id, item['id'], item['quantity'], item['price'])
+                    (order_id, item['id'], item['quantity'], item['price'] * item['quantity'])
                 )
+                
+                # Update stock
                 cursor.execute(
                     "UPDATE products SET stock = stock - ? WHERE id = ?",
                     (item['quantity'], item['id'])
                 )
 
+            # Commit transaction
             connection.commit()
             session.pop('cart', None)
-            
-            # Redirect to receipt page
+            connection.close()
+
+            # Redirect to the receipt
             return redirect(url_for('receipt', order_id=order_id))
-            
+
         except Exception as e:
             logger.error(f"Checkout error: {str(e)}")
             if 'connection' in locals():
                 connection.rollback()
                 connection.close()
-            flash("Error processing your order. Please try again.", "danger")
-            return render_template('checkout.html', cart_items=cart_items, total=total)
+            flash("Error processing your order.", "danger")
+            return redirect(url_for('cart'))
 
     return render_template('checkout.html', cart_items=cart_items, total=total)
 
