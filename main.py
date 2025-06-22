@@ -218,21 +218,24 @@ def get_cart_items(): #Helper function to get all items in the cart with their d
             connection.close()
     return cart_items
 
-def calculate_cart_total():
-    """Helper function to calculate the total price of all items in the cart"""
-    total = 0
-    if session.get('cart'):
-        connection = get_db()
-        cursor = connection.cursor()
-        try:
-            for product_id, quantity in session['cart'].items():
-                cursor.execute("SELECT price FROM products WHERE id = ?", (product_id,))
-                result = cursor.fetchone()
-                if result:
-                    total += result['price'] * quantity
-        finally:
-            connection.close()
-    return total
+def calculate_cart_total(): #Optimised cart total calculation using list comprehension and sum
+    if not session.get('cart'):
+        return 0
+        
+    connection = get_db()
+    cursor = connection.cursor()
+    try:
+        # Get all prices in one query instead of multiple queries
+        product_ids = list(session['cart'].keys())
+        placeholders = ','.join('?' * len(product_ids))
+        cursor.execute(f"SELECT id, price FROM products WHERE id IN ({placeholders})", product_ids)
+        products = cursor.fetchall()
+        
+        # Calculate total using list comprehension and sum
+        return sum(product['price'] * session['cart'][str(product['id'])] 
+                  for product in products)
+    finally:
+        connection.close()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -264,6 +267,11 @@ def login():
                 session['mobile'] = decrypt_data(user['mobile']) if user['mobile'] else 'Not provided'
                 session['address'] = decrypt_data(user['address']) if user['address'] else 'Not provided'
                 session.permanent = True
+                
+                # Check if user was trying to checkout
+                if session.get('checkout_pending'):
+                    session.pop('checkout_pending', None)
+                    return redirect(url_for('checkout'))
                 
                 flash('Login successful!', 'success')
                 return redirect(url_for('customer_dashboard'))
@@ -706,10 +714,7 @@ def home():
 
 @app.route("/cart")
 def cart():
-    if not session.get('user_id'):
-        flash("Please log in to view your cart", "warning")
-        return redirect(url_for("login"))
-        
+    # Remove login requirement for viewing cart
     cart_items = []
     total = 0
     
@@ -732,17 +737,14 @@ def cart():
 
 @app.route("/add_to_cart/<int:product_id>", methods=["POST"])
 def add_to_cart(product_id):
-    if not session.get('user_id'):
-        flash("Please log in to add items to cart", "warning")
-        return redirect(url_for("login"))
-    
+    # Remove login check to allow anyone to add to cart
     try:
         quantity = int(request.form.get("quantity", 1))
         if quantity < 1:
             flash("Invalid quantity", "danger")
             return redirect(url_for("product_detail", product_id=product_id))
         
-        # Initialise cart in session if it doesn't exist
+        # Initialize cart in session if it doesn't exist
         if 'cart' not in session:
             session['cart'] = {}
             
@@ -776,78 +778,11 @@ def remove_from_cart(product_id):
         flash("Invalid quantity", "danger")
     return redirect(url_for("cart"))
 
-def get_product_by_id(product_id):
-    """Helper function to fetch a product by its ID from the database."""
-    connection = get_db()
-    cursor = connection.cursor()
-    try:
-        cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
-        product = cursor.fetchone()
-        return dict(product) if product else None
-    finally:
-        cursor.close()
-
-@app.route('/receipt/<int:order_id>')
-def receipt(order_id):
-    if not session.get('user_id'):
-        flash("Please log in to view receipts", "warning")
-        return redirect(url_for('login'))
-
-    try:
-        connection = get_db()
-        cursor = connection.cursor()
-        
-        # Get order info and verify it belongs to current user
-        cursor.execute("""
-            SELECT o.id, o.created_at, o.total, o.user_id
-            FROM orders o
-            WHERE o.id = ? AND o.user_id = ?
-        """, (order_id, session['user_id']))
-        
-        order = cursor.fetchone()
-        
-        if not order:
-            connection.close()
-            flash("Receipt not found", "danger")
-            return redirect(url_for('customer_dashboard'))
-            
-        # Get order items
-        cursor.execute("""
-            SELECT p.name, oi.quantity, oi.price as total_price
-            FROM order_items oi
-            JOIN products p ON oi.product_id = p.id
-            WHERE oi.order_id = ?
-        """, (order_id,))
-        
-        items = cursor.fetchall()
-        
-        order_data = {
-            'id': order['id'],
-            'created_at': order['created_at'],
-            'address': session.get('address'),
-            'total': order['total'],
-            'items': [{
-                'name': item['name'],
-                'quantity': item['quantity'],
-                'unit_price': item['total_price'] / item['quantity'],
-                'total_price': item['total_price']
-            } for item in items]
-        }
-        
-        connection.close()
-        return render_template('receipt.html', order=order_data)
-        
-    except Exception as e:
-        logger.error(f"Receipt error: {str(e)}")
-        if 'connection' in locals():
-            connection.close()
-        flash("Error displaying receipt", "danger")
-        return redirect(url_for('customer_dashboard'))
-
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
     if not session.get('user_id'):
-        flash("Please log in to checkout", "warning")
+        session['checkout_pending'] = True
+        flash("Please log in to complete your purchase", "warning")
         return redirect(url_for('login'))
 
     cart_items = get_cart_items()
@@ -862,7 +797,6 @@ def checkout():
             connection = get_db()
             cursor = connection.cursor()
 
-            # Start transaction
             cursor.execute("BEGIN TRANSACTION")
 
             # Create the order
@@ -875,25 +809,22 @@ def checkout():
 
             # Insert order items and update stock
             for item in cart_items:
-                # Insert order item
                 cursor.execute(
                     "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
                     (order_id, item['id'], item['quantity'], item['price'] * item['quantity'])
                 )
                 
-                # Update stock
                 cursor.execute(
                     "UPDATE products SET stock = stock - ? WHERE id = ?",
                     (item['quantity'], item['id'])
                 )
 
-            # Commit transaction
             connection.commit()
             session.pop('cart', None)
             connection.close()
 
-            # Redirect to the receipt
-            return redirect(url_for('receipt', order_id=order_id))
+            flash("Order completed successfully!", "success")
+            return redirect(url_for('customer_dashboard'))
 
         except Exception as e:
             logger.error(f"Checkout error: {str(e)}")
