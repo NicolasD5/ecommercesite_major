@@ -347,8 +347,6 @@ def customer_dashboard():
             })
 
         connection.close()
-        print(user_data)
-        print(orders)
         return render_template("customer_dashboard.html", 
                             user_data=user_data,
                             orders=orders)

@@ -4,6 +4,27 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+    .product-card {
+        position: relative;
+        transition: transform 0.2s;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .product-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+    
+    .product-link:hover {
+        text-decoration: none;
+        color: inherit;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -20,14 +41,16 @@
 
     <div class="products-grid">
         {% for product in products %}
-        <div class="product-card">
-            {% if product.image %}
-            <img src="{{ url_for('static', filename='product_images/' + product.image) }}" alt="{{ product.name }}">
-            {% endif %}
-            <h2><a href="{{ url_for('product_detail', product_id=product['id']) }}">{{ product.name }}</a></h2>
-            <p class="price">${{ "%.2f"|format(product.price) }}</p>
-            <p class="stock">In stock: {{ product.stock }}</p>
-        </div>
+        <a href="{{ url_for('product_detail', product_id=product['id']) }}" class="product-link">
+            <div class="product-card">
+                {% if product.image %}
+                <img src="{{ url_for('static', filename='product_images/' + product.image) }}" alt="{{ product.name }}">
+                {% endif %}
+                <h2>{{ product.name }}</h2>
+                <p class="price">${{ "%.2f"|format(product.price) }}</p>
+                <p class="stock">In stock: {{ product.stock }}</p>
+            </div>
+        </a>
         {% endfor %}
     </div>
 </main>
